@@ -1,0 +1,4 @@
+RewriteEngine On
+
+# Redirect /home to the root index page with a 301 (Permanent) status
+RewriteRule ^home$ / [R=301,L]

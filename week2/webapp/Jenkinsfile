@@ -1,0 +1,64 @@
+pipeline {
+    agent any
+
+    environment {
+        DEPLOY_DIR = "deployment_ready"
+    }
+
+    stages {
+        stage('Cleanup') {
+            steps {
+                sh "rm -rf ${DEPLOY_DIR} && mkdir ${DEPLOY_DIR}"
+            }
+        }
+
+        stage('Build Frontend (NPM)') {
+            steps {
+                dir('frontend') {
+                    sh 'npm install'
+                    sh 'npm run build'
+                    // Copy production build to deployment folder
+                    sh "cp -r build/* ../${DEPLOY_DIR}/"
+                }
+            }
+        }
+
+        stage('Build Backend (Java/Maven)') {
+            steps {
+                dir('backend-java') {
+                    sh './mvnw clean package -DskipTests'
+                    // Copy the JAR file
+                    sh "cp target/*.jar ../${DEPLOY_DIR}/app.jar"
+                }
+            }
+        }
+
+        stage('Prepare Python environment') {
+            steps {
+                dir('backend-python') {
+                    // Copy python scripts and requirements
+                    sh "cp -r . ../${DEPLOY_DIR}/python-app"
+                    // Generate requirements for the deployment folder
+                    sh "pip freeze > ../${DEPLOY_DIR}/python-app/requirements.txt"
+                }
+            }
+        }
+
+        stage('Finalize Package') {
+            steps {
+                // Create a manifest or version file
+                sh "echo 'Build Version: ${env.BUILD_NUMBER}' > ${DEPLOY_DIR}/version.txt"
+                
+                // Archive the entire folder as a zip for deployment
+                zip zipFile: 'deployment.zip', dir: "${DEPLOY_DIR}"
+            }
+        }
+    }
+
+    post {
+        success {
+            archiveArtifacts artifacts: 'deployment.zip', fingerprint: true
+            echo "Deployment package is ready in the artifacts."
+        }
+    }
+}
